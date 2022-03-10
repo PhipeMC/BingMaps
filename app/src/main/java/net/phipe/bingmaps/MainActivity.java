@@ -44,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
         ((FrameLayout)findViewById(R.id.map_view)).addView(mMapView);
         mMapView.onCreate(savedInstanceState);
         mMapView.setScene(
-                MapScene.createFromLocationAndZoomLevel(ITSUR, 16),
+                MapScene.createFromLocationAndZoomLevel(ITSUR, 15),
                 MapAnimationKind.NONE);
         mPinLayer = new MapElementLayer();
         mMapView.getLayers().add(mPinLayer);
@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
         mMapView.setMapProjection(MapProjection.WEB_MERCATOR);
 
         drawLineOnMap(mMapView);
+        drawPins();
     }
 
     void drawLineOnMap(MapView mapView) {
@@ -131,20 +132,18 @@ public class MainActivity extends AppCompatActivity {
         return geopoints;
     }
 
-    public void pointsMap(){
-        ArrayList<Geoposition> list = fillData();
-        for (Geoposition gp: list){
-            mPinLayer.getElements().add(new MapIcon());
-        }
-        Geopoint location = new Geopoint(20.140062, -101.150552);  // your pin lat-long coordinates
-        String title = "Pin";       // title to be shown next to the pin
-        //Bitmap pinBitmap = ...   // your pin graphic (optional)
-
+    public void drawPins(){
+        Geopoint location = new Geopoint(20.131993, -101.181831);  // your pin lat-long coordinates
+        Geopoint l1 = new Geopoint(20.139561, -101.150646);
+        String pin = "ITSUR";
+        String title = "Casa";
+        MapIcon pin1 = new MapIcon();
         MapIcon pushpin = new MapIcon();
+        pin1.setLocation(l1);
         pushpin.setLocation(location);
+        pin1.setTitle(pin);
         pushpin.setTitle(title);
-        //pushpin.setImage(new MapImage(pinBitmap));
-
+        mPinLayer.getElements().add(pin1);
         mPinLayer.getElements().add(pushpin);
     }
 }
