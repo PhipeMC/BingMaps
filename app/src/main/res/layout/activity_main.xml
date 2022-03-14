@@ -6,10 +6,21 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <Button
+        android:id="@+id/btn_delete"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Resetear ubicación"
+        app:layout_constraintBottom_toBottomOf="@+id/map_view"
+        app:layout_constraintEnd_toEndOf="@+id/map_view"
+        app:layout_constraintStart_toStartOf="@+id/map_view" />
+
     <FrameLayout
         android:id="@+id/map_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        />
+        >
+
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
