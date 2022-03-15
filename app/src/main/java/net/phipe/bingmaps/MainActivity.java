@@ -66,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
 
     private MapView mMapView;
     private static final Geopoint ITSUR = new Geopoint(20.140062, -101.150552);
+    private Geopoint startPin = null;
     private MapElementLayer mPinLayer;
     private boolean locationPin = false;
     private int indexLocationPin = 0;
@@ -98,6 +99,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onMapTapped(MapTappedEventArgs mapTappedEventArgs) {
                 Geopoint position = mapTappedEventArgs.location;
+                startPin = position;
 
                 if (!locationPin) {
                     String pin = "Destino";
@@ -107,30 +109,9 @@ public class MainActivity extends AppCompatActivity {
                     indexLocationPin = mPinLayer.getElements().size() - 1;
                     Log.d("GPS", "index: " + Integer.toString(indexLocationPin));
                     mPinLayer.getElements().add(indexLocationPin, pintest);
-                    //obtenerRouteFromMapRequest();
+                    obtenerRouteFromMapRequest();
                     locationPin = true;
-
-                    MapServices.setCredentialsKey(getString(R.string.key_api));
-                    MapServices.setContext(getApplicationContext());
-
-                    MapRouteDrivingOptions options = new MapRouteDrivingOptions()
-                            .setRouteOptimization(MapRouteOptimization.TIME_WITH_TRAFFIC)
-                            .setRouteRestrictions(MapRouteRestrictions.TOLLROADS)
-                            .setMaxAlternateRouteCount(2);
-
-                    /*MapRouteFinder.getDrivingRoute(position, ITSUR, options,
-                            new OnMapRouteFinderResultListener() {
-                                @Override
-                                public void onMapRouteFinderResult(MapRouteFinderResult result) {
-                                    if (result.getStatus() == MapRouteFinderStatus.SUCCESS) {
-                                        MapRoute route = result.getRoute();
-                                        List<MapRoute> alternateRoutes = result.getAlternateRoutes();
-                                    }
-                                }
-                            }
-                    );*/
                 }
-
                 return false;
             }
         });
@@ -154,6 +135,7 @@ public class MainActivity extends AppCompatActivity {
             if (locationPin) {
                 locationPin = false;
                 mPinLayer.getElements().remove(indexLocationPin);
+                startPin = null;
             }
         });
     }
@@ -253,9 +235,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void obtenerRouteFromMapRequest() {
-        //String URL = String.format("http://dev.virtualearth.net/REST/v1/Routes/Driving?wayPoint.1=%f,%f&wayPoint.2=%f,%f&optimize=time&distanceUnit=km&key=%s", String.valueOf(R.string.key_api));
+        String URL = String.format("https://dev.virtualearth.net/REST/v1/Routes/Driving?wayPoint.1=%f,%f&wayPoint.2=%f,%f&optimize=time&distanceUnit=km&key=%s",
+                startPin.getPosition().getLatitude(), startPin.getPosition().getLongitude(), ITSUR.getPosition().getLatitude(), ITSUR.getPosition().getLongitude(),
+                getString(R.string.key_api));
+        Log.d("URL", URL);
         queue = Volley.newRequestQueue(this);
-        requestMapRequest = new JsonObjectRequest("http://dev.virtualearth.net/REST/v1/Routes/Driving?wayPoint.1=20.131971,-101.181873&wayPoint.2=20.140348,-101.150537&optimize=time&distanceUnit=km&key=AoTiyZa6RZpBERvYHs-2CzOFrvBOjHpnD5COkE9m4jWdW2Cjg2nwRY6MWiP0hkuq", null,
+        requestMapRequest = new JsonObjectRequest(URL, null,
                 new Response.Listener<JSONObject>() {
                     @Override
                     public void onResponse(JSONObject response) {
@@ -303,5 +288,34 @@ public class MainActivity extends AppCompatActivity {
         flyout.setTitle("ITSUR");
         flyout.setDescription("Instituto Tecnológico Superior del Sur de Guanajuato");
         pin1.setFlyout(flyout);
+    }
+
+    public void mapRoute() {
+        MapServices.setCredentialsKey(getString(R.string.key_api));
+        MapServices.setContext(getApplicationContext());
+        MapServices.setLanguage("Spanish");
+
+        MapRouteDrivingOptions options = new MapRouteDrivingOptions()
+                .setRouteOptimization(MapRouteOptimization.TIME_WITH_TRAFFIC)
+                .setRouteRestrictions(MapRouteRestrictions.TOLLROADS)
+                .setMaxAlternateRouteCount(2);
+
+        if (startPin != null) {
+            try {
+                MapRouteFinder.getDrivingRoute(startPin, ITSUR, options,
+                        new OnMapRouteFinderResultListener() {
+                            @Override
+                            public void onMapRouteFinderResult(MapRouteFinderResult result) {
+                                if (result.getStatus() == MapRouteFinderStatus.SUCCESS) {
+                                    MapRoute route = result.getRoute();
+                                    List<MapRoute> alternateRoutes = result.getAlternateRoutes();
+                                }
+                            }
+                        }
+                );
+            } catch (Exception e) {
+                Log.d("GPS", e.toString());
+            }
+        }
     }
 }
