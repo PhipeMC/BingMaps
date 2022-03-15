@@ -2,16 +2,30 @@ package net.phipe.bingmaps;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.res.ResourcesCompat;
 
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Point;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
+
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import com.microsoft.maps.GPSMapLocationProvider;
 import com.microsoft.maps.Geopath;
@@ -21,6 +35,7 @@ import com.microsoft.maps.MapFlyout;
 import com.microsoft.maps.MapPolygon;
 import com.microsoft.maps.MapPolyline;
 import com.microsoft.maps.MapRenderMode;
+import com.microsoft.maps.MapServices;
 import com.microsoft.maps.MapTappedEventArgs;
 import com.microsoft.maps.MapUserLocation;
 import com.microsoft.maps.MapUserLocationTrackingState;
@@ -35,10 +50,17 @@ import com.microsoft.maps.MapStyleSheets;
 import com.microsoft.maps.MapProjection;
 import com.microsoft.maps.MapRouteLine;
 import com.microsoft.maps.OnMapTappedListener;
+import com.microsoft.maps.routing.MapRoute;
+import com.microsoft.maps.routing.MapRouteDrivingOptions;
+import com.microsoft.maps.routing.MapRouteFinder;
+import com.microsoft.maps.routing.MapRouteFinderResult;
+import com.microsoft.maps.routing.MapRouteFinderStatus;
+import com.microsoft.maps.routing.MapRouteOptimization;
+import com.microsoft.maps.routing.MapRouteRestrictions;
+import com.microsoft.maps.routing.OnMapRouteFinderResultListener;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -48,15 +70,18 @@ public class MainActivity extends AppCompatActivity {
     private boolean locationPin = false;
     private int indexLocationPin = 0;
     private Button btn_delete;
+    private RequestQueue queue;
+    private JsonObjectRequest requestMapRequest;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        queue = Volley.newRequestQueue(this);
 
         mMapView = new MapView(this, MapRenderMode.VECTOR);  // or use MapRenderMode.RASTER for 2D map
-        mMapView.setCredentialsKey("AoTiyZa6RZpBERvYHs-2CzOFrvBOjHpnD5COkE9m4jWdW2Cjg2nwRY6MWiP0hkuq");
-        ((FrameLayout)findViewById(R.id.map_view)).addView(mMapView);
+        mMapView.setCredentialsKey(getString(R.string.key_api));
+        ((FrameLayout) findViewById(R.id.map_view)).addView(mMapView);
         mMapView.onCreate(savedInstanceState);
         mMapView.setScene(
                 MapScene.createFromLocationAndZoomLevel(ITSUR, 15),
@@ -74,15 +99,36 @@ public class MainActivity extends AppCompatActivity {
             public boolean onMapTapped(MapTappedEventArgs mapTappedEventArgs) {
                 Geopoint position = mapTappedEventArgs.location;
 
-                if(!locationPin) {
+                if (!locationPin) {
                     String pin = "Destino";
                     MapIcon pintest = new MapIcon();
                     pintest.setLocation(position);
                     pintest.setTitle(pin);
-                    indexLocationPin = mPinLayer.getElements().size()-1;
-                    Log.d("GPS","index: "+Integer.toString(indexLocationPin));
-                    mPinLayer.getElements().add(indexLocationPin,pintest);
+                    indexLocationPin = mPinLayer.getElements().size() - 1;
+                    Log.d("GPS", "index: " + Integer.toString(indexLocationPin));
+                    mPinLayer.getElements().add(indexLocationPin, pintest);
+                    //obtenerRouteFromMapRequest();
                     locationPin = true;
+
+                    MapServices.setCredentialsKey(getString(R.string.key_api));
+                    MapServices.setContext(getApplicationContext());
+
+                    MapRouteDrivingOptions options = new MapRouteDrivingOptions()
+                            .setRouteOptimization(MapRouteOptimization.TIME_WITH_TRAFFIC)
+                            .setRouteRestrictions(MapRouteRestrictions.TOLLROADS)
+                            .setMaxAlternateRouteCount(2);
+
+                    /*MapRouteFinder.getDrivingRoute(position, ITSUR, options,
+                            new OnMapRouteFinderResultListener() {
+                                @Override
+                                public void onMapRouteFinderResult(MapRouteFinderResult result) {
+                                    if (result.getStatus() == MapRouteFinderStatus.SUCCESS) {
+                                        MapRoute route = result.getRoute();
+                                        List<MapRoute> alternateRoutes = result.getAlternateRoutes();
+                                    }
+                                }
+                            }
+                    );*/
                 }
 
                 return false;
@@ -92,23 +138,20 @@ public class MainActivity extends AppCompatActivity {
         MapUserLocation userLocation = mMapView.getUserLocation();
 
         MapUserLocationTrackingState userLocationTrackingState = userLocation.startTracking(new GPSMapLocationProvider.Builder(getApplicationContext()).build());
-        if (userLocationTrackingState == MapUserLocationTrackingState.PERMISSION_DENIED)
-        {
+        if (userLocationTrackingState == MapUserLocationTrackingState.PERMISSION_DENIED) {
             // request for user location permissions and then call startTracking again
-        } else if (userLocationTrackingState == MapUserLocationTrackingState.READY)
-        {
+        } else if (userLocationTrackingState == MapUserLocationTrackingState.READY) {
             // handle the case where location tracking was successfully started
-        } else if (userLocationTrackingState == MapUserLocationTrackingState.DISABLED)
-        {
+        } else if (userLocationTrackingState == MapUserLocationTrackingState.DISABLED) {
             // handle the case where all location providers were disabled
         }
 
-        drawLineOnMap(mMapView);
+        //drawLineOnMap(mMapView);
         drawPins();
 
         btn_delete = findViewById(R.id.btn_delete);
         btn_delete.setOnClickListener(view -> {
-            if(locationPin){
+            if (locationPin) {
                 locationPin = false;
                 mPinLayer.getElements().remove(indexLocationPin);
             }
@@ -122,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
 
         MapPolyline mapPolyline = new MapPolyline();
         mapPolyline.setPath(new Geopath(geopoints));
-        mapPolyline.setStrokeColor(Color.rgb(0,164,239));
+        mapPolyline.setStrokeColor(Color.rgb(0, 164, 239));
         mapPolyline.setStrokeWidth(5);
         mapPolyline.setStrokeDashed(false);
 
@@ -137,6 +180,19 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         mMapView.onStart();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mMapView.onResume();
+        //obtenerRouteFromMapRequest();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mMapView.onPause();
     }
 
     @Override
@@ -155,6 +211,12 @@ public class MainActivity extends AppCompatActivity {
     public void onSaveInstanceState(@NonNull Bundle outState, @NonNull PersistableBundle outPersistentState) {
         super.onSaveInstanceState(outState, outPersistentState);
         mMapView.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        mMapView.onLowMemory();
     }
 
     public ArrayList<Geoposition> fillData() {
@@ -190,16 +252,56 @@ public class MainActivity extends AppCompatActivity {
         return geopoints;
     }
 
-    public void drawPins(){
+    private void obtenerRouteFromMapRequest() {
+        //String URL = String.format("http://dev.virtualearth.net/REST/v1/Routes/Driving?wayPoint.1=%f,%f&wayPoint.2=%f,%f&optimize=time&distanceUnit=km&key=%s", String.valueOf(R.string.key_api));
+        queue = Volley.newRequestQueue(this);
+        requestMapRequest = new JsonObjectRequest("http://dev.virtualearth.net/REST/v1/Routes/Driving?wayPoint.1=20.131971,-101.181873&wayPoint.2=20.140348,-101.150537&optimize=time&distanceUnit=km&key=AoTiyZa6RZpBERvYHs-2CzOFrvBOjHpnD5COkE9m4jWdW2Cjg2nwRY6MWiP0hkuq", null,
+                new Response.Listener<JSONObject>() {
+                    @Override
+                    public void onResponse(JSONObject response) {
+                        Log.d("GIVO", "se ejecuto");
+                        try {
+                            JSONArray indicaiones = response.getJSONObject("resourceSets").getJSONArray("resources").getJSONObject(6).getJSONArray("itineraryItems");
+                            //JSONArray indicaiones = response.getJSONObject("resourceSets").getJSONArray("resources");
+
+                            for (int i = 0; i < indicaiones.length(); i++) {
+                                JSONObject indi = indicaiones.getJSONObject(i);
+                                String strlatlog = indi.getJSONObject("maneuverPoint").get("coordinates").toString();
+                                Log.d("JSON", strlatlog);
+                            }
+
+                            /*for (int i = 0; i < indicaiones.length(); i++) {
+                                JSONObject indi = indicaiones.getJSONObject(i);
+                                String strlatlog = indi.getJSONObject("maneuverPoint").get("coordinates"). + "," + indi.getJSONObject("startPoint").get("lng").toString();
+                                Log.d("GIVO", "se ejecuto: " + strlatlog);
+                            }*/
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                },
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.d("GIVO", "se ejecuto CON ERROR");
+                        Log.d("GIVO", error.toString());
+                    }
+                }
+        );
+        queue.add(requestMapRequest);
+    }
+
+    public void drawPins() {
         Geopoint l1 = new Geopoint(20.139561, -101.150646);
         String pin = "ITSUR";
         MapIcon pin1 = new MapIcon();
         pin1.setLocation(l1);
         pin1.setTitle(pin);
         mPinLayer.getElements().add(pin1);
+
         MapFlyout flyout = new MapFlyout();
         flyout.setTitle("ITSUR");
-        flyout.setDescription("Universidad de GTO");
+        flyout.setDescription("Instituto Tecnológico Superior del Sur de Guanajuato");
         pin1.setFlyout(flyout);
     }
 }
