@@ -7,10 +7,10 @@
     tools:context=".MainActivity">
 
     <Button
-        android:id="@+id/btn_delete"
+        android:id="@+id/btn_route"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Resetear ubicación"
+        android:text="Trazar ruta"
         app:layout_constraintBottom_toBottomOf="@+id/map_view"
         app:layout_constraintEnd_toEndOf="@+id/map_view"
         app:layout_constraintStart_toStartOf="@+id/map_view" />

@@ -2,8 +2,12 @@ package net.phipe.bingmaps;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -65,7 +69,7 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private MapView mMapView;
-    private static final Geopoint ITSUR = new Geopoint(20.140062, -101.150552);
+    private static final Geopoint CASA = new Geopoint(20.132003, -101.181823);
     private Geopoint startPin = null;
     private MapElementLayer mPinLayer;
     private boolean locationPin = false;
@@ -73,6 +77,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btn_delete;
     private RequestQueue queue;
     private JsonObjectRequest requestMapRequest;
+    private ArrayList<Geoposition> listRoute;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,12 +85,20 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         queue = Volley.newRequestQueue(this);
 
+        if(ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                        != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION}, 1);
+        }
+
         mMapView = new MapView(this, MapRenderMode.VECTOR);  // or use MapRenderMode.RASTER for 2D map
         mMapView.setCredentialsKey(getString(R.string.key_api));
         ((FrameLayout) findViewById(R.id.map_view)).addView(mMapView);
         mMapView.onCreate(savedInstanceState);
         mMapView.setScene(
-                MapScene.createFromLocationAndZoomLevel(ITSUR, 15),
+                MapScene.createFromLocationAndZoomLevel(CASA, 13),
                 MapAnimationKind.NONE);
         mPinLayer = new MapElementLayer();
         mMapView.getLayers().add(mPinLayer);
@@ -95,29 +108,7 @@ public class MainActivity extends AppCompatActivity {
         mMapView.setMapProjection(MapProjection.GLOBE);
         mMapView.setMapProjection(MapProjection.WEB_MERCATOR);
 
-        mMapView.addOnMapTappedListener(new OnMapTappedListener() {
-            @Override
-            public boolean onMapTapped(MapTappedEventArgs mapTappedEventArgs) {
-                Geopoint position = mapTappedEventArgs.location;
-                startPin = position;
-
-                if (!locationPin) {
-                    String pin = "Destino";
-                    MapIcon pintest = new MapIcon();
-                    pintest.setLocation(position);
-                    pintest.setTitle(pin);
-                    indexLocationPin = mPinLayer.getElements().size() - 1;
-                    Log.d("GPS", "index: " + Integer.toString(indexLocationPin));
-                    mPinLayer.getElements().add(indexLocationPin, pintest);
-                    obtenerRouteFromMapRequest();
-                    locationPin = true;
-                }
-                return false;
-            }
-        });
-
         MapUserLocation userLocation = mMapView.getUserLocation();
-
         MapUserLocationTrackingState userLocationTrackingState = userLocation.startTracking(new GPSMapLocationProvider.Builder(getApplicationContext()).build());
         if (userLocationTrackingState == MapUserLocationTrackingState.PERMISSION_DENIED) {
             // request for user location permissions and then call startTracking again
@@ -127,26 +118,52 @@ public class MainActivity extends AppCompatActivity {
             // handle the case where all location providers were disabled
         }
 
-        //drawLineOnMap(mMapView);
+        /*mMapView.addOnMapTappedListener(new OnMapTappedListener() {
+            @Override
+            public boolean onMapTapped(MapTappedEventArgs mapTappedEventArgs) {
+                Geopoint position = mapTappedEventArgs.location;
+                startPin = position;
+
+                if (!locationPin) {
+                    String pin = "Inicio";
+                    MapIcon pintest = new MapIcon();
+                    pintest.setLocation(position);
+                    pintest.setTitle(pin);
+                    indexLocationPin = mPinLayer.getElements().size() - 1;
+                    mPinLayer.getElements().add(indexLocationPin, pintest);
+                    obtenerRouteFromMapRequest();
+                    //drawLineOnMap(mMapView);
+                    locationPin = true;
+                }
+                return false;
+            }
+        });*/
+
         drawPins();
 
-        btn_delete = findViewById(R.id.btn_delete);
+        /*btn_delete = findViewById(R.id.btn_delete);
         btn_delete.setOnClickListener(view -> {
             if (locationPin) {
                 locationPin = false;
                 mPinLayer.getElements().remove(indexLocationPin);
                 startPin = null;
+
+                mMapView.getLayers().remove(mMapView.getLayers().size()-1);
+            }
+        });*/
+
+        btn_delete = findViewById(R.id.btn_route);
+        btn_delete.setOnClickListener(view -> {
+            if (userLocation.getLastLocationData() != null) {
+                startPin = new Geopoint(userLocation.getLastLocationData().getLatitude(), userLocation.getLastLocationData().getLongitude());
+                obtenerRouteFromMapRequest();
             }
         });
     }
 
-    void drawLineOnMap(MapView mapView) {
-        Geoposition center = mapView.getCenter().getPosition();
-
-        ArrayList<Geoposition> geopoints = fillData();
-
+    void drawLineOnMap() {
         MapPolyline mapPolyline = new MapPolyline();
-        mapPolyline.setPath(new Geopath(geopoints));
+        mapPolyline.setPath(new Geopath(listRoute));
         mapPolyline.setStrokeColor(Color.rgb(0, 164, 239));
         mapPolyline.setStrokeWidth(5);
         mapPolyline.setStrokeDashed(false);
@@ -155,7 +172,8 @@ public class MainActivity extends AppCompatActivity {
         MapElementLayer linesLayer = new MapElementLayer();
         linesLayer.setZIndex(1.0f);
         linesLayer.getElements().add(mapPolyline);
-        mapView.getLayers().add(linesLayer);
+        mMapView.getLayers().add(linesLayer);
+        Log.d("MapLayer", ""+mMapView.getLayers().size());
     }
 
     @Override
@@ -168,7 +186,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         mMapView.onResume();
-        //obtenerRouteFromMapRequest();
     }
 
     @Override
@@ -201,42 +218,9 @@ public class MainActivity extends AppCompatActivity {
         mMapView.onLowMemory();
     }
 
-    public ArrayList<Geoposition> fillData() {
-        ArrayList<Geoposition> geopoints = new ArrayList<Geoposition>();
-        geopoints.add(new Geoposition(20.131912,
-                -101.181968));
-        geopoints.add(new Geoposition(20.132098,
-                -101.182085));
-        geopoints.add(new Geoposition(20.135686,
-                -101.180554));
-        geopoints.add(new Geoposition(20.135493,
-                -101.178985));
-        geopoints.add(new Geoposition(20.136591,
-                -101.178816));
-        geopoints.add(new Geoposition(20.136665,
-                -101.176773));
-        geopoints.add(new Geoposition(20.1396,
-                -101.176733));
-        geopoints.add(new Geoposition(20.139332,
-                -101.171185));
-        geopoints.add(new Geoposition(20.141595,
-                -101.171048));
-        geopoints.add(new Geoposition(20.142849,
-                -101.157803));
-        geopoints.add(new Geoposition(20.14293,
-                -101.156401));
-        geopoints.add(new Geoposition(20.1435,
-                -101.149911));
-        geopoints.add(new Geoposition(20.140523,
-                -101.150548));
-        geopoints.add(new Geoposition(20.140523,
-                -101.150548));
-        return geopoints;
-    }
-
     private void obtenerRouteFromMapRequest() {
         String URL = String.format("https://dev.virtualearth.net/REST/v1/Routes/Driving?wayPoint.1=%f,%f&wayPoint.2=%f,%f&optimize=time&distanceUnit=km&key=%s",
-                startPin.getPosition().getLatitude(), startPin.getPosition().getLongitude(), ITSUR.getPosition().getLatitude(), ITSUR.getPosition().getLongitude(),
+                startPin.getPosition().getLatitude(), startPin.getPosition().getLongitude(), CASA.getPosition().getLatitude(), CASA.getPosition().getLongitude(),
                 getString(R.string.key_api));
         Log.d("URL", URL);
         queue = Volley.newRequestQueue(this);
@@ -246,20 +230,22 @@ public class MainActivity extends AppCompatActivity {
                     public void onResponse(JSONObject response) {
                         Log.d("GIVO", "se ejecuto");
                         try {
-                            JSONArray indicaiones = response.getJSONObject("resourceSets").getJSONArray("resources").getJSONObject(6).getJSONArray("itineraryItems");
-                            //JSONArray indicaiones = response.getJSONObject("resourceSets").getJSONArray("resources");
+                            JSONArray indicaiones = response.getJSONArray("resourceSets").getJSONObject(0).
+                                    getJSONArray("resources").getJSONObject(0).getJSONArray("routeLegs")
+                                    .getJSONObject(0).getJSONArray("itineraryItems");
+
+                            listRoute = new ArrayList<>();
 
                             for (int i = 0; i < indicaiones.length(); i++) {
                                 JSONObject indi = indicaiones.getJSONObject(i);
-                                String strlatlog = indi.getJSONObject("maneuverPoint").get("coordinates").toString();
-                                Log.d("JSON", strlatlog);
+                                JSONArray strlatlog = (JSONArray) indi.getJSONObject("maneuverPoint").get("coordinates");
+                                double lat = strlatlog.getDouble(0);
+                                double lon = strlatlog.getDouble(1);
+                                listRoute.add(new Geoposition(lat, lon));
+                                Log.d("JSON", "lat: "+lat+" lon: "+lon);
                             }
 
-                            /*for (int i = 0; i < indicaiones.length(); i++) {
-                                JSONObject indi = indicaiones.getJSONObject(i);
-                                String strlatlog = indi.getJSONObject("maneuverPoint").get("coordinates"). + "," + indi.getJSONObject("startPoint").get("lng").toString();
-                                Log.d("GIVO", "se ejecuto: " + strlatlog);
-                            }*/
+                            drawLineOnMap();
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
@@ -277,45 +263,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void drawPins() {
-        Geopoint l1 = new Geopoint(20.139561, -101.150646);
-        String pin = "ITSUR";
+        String pin = "Casa";
         MapIcon pin1 = new MapIcon();
-        pin1.setLocation(l1);
+        pin1.setLocation(CASA);
         pin1.setTitle(pin);
         mPinLayer.getElements().add(pin1);
 
         MapFlyout flyout = new MapFlyout();
-        flyout.setTitle("ITSUR");
-        flyout.setDescription("Instituto Tecnológico Superior del Sur de Guanajuato");
+        flyout.setTitle("Casa");
+        flyout.setDescription("Hogar dulce hogar");
         pin1.setFlyout(flyout);
-    }
-
-    public void mapRoute() {
-        MapServices.setCredentialsKey(getString(R.string.key_api));
-        MapServices.setContext(getApplicationContext());
-        MapServices.setLanguage("Spanish");
-
-        MapRouteDrivingOptions options = new MapRouteDrivingOptions()
-                .setRouteOptimization(MapRouteOptimization.TIME_WITH_TRAFFIC)
-                .setRouteRestrictions(MapRouteRestrictions.TOLLROADS)
-                .setMaxAlternateRouteCount(2);
-
-        if (startPin != null) {
-            try {
-                MapRouteFinder.getDrivingRoute(startPin, ITSUR, options,
-                        new OnMapRouteFinderResultListener() {
-                            @Override
-                            public void onMapRouteFinderResult(MapRouteFinderResult result) {
-                                if (result.getStatus() == MapRouteFinderStatus.SUCCESS) {
-                                    MapRoute route = result.getRoute();
-                                    List<MapRoute> alternateRoutes = result.getAlternateRoutes();
-                                }
-                            }
-                        }
-                );
-            } catch (Exception e) {
-                Log.d("GPS", e.toString());
-            }
-        }
     }
 }
